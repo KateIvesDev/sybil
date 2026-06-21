@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//private/tmp/**)",
+      "Bash(curl -s http://localhost:3000/api/outreach)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{JSON.parse\\(d\\).rows.forEach\\(r=>console.log\\(' -',r.accountName,r.status\\)\\);}\\)\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/incident/reset)",
+      "Bash(curl -s http://localhost:3000/api/health)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('silentImpactCount:',j.silentImpactCount,'arrAtRisk:',j.arrAtRisk\\);}\\)\")",
+      "Bash(npx next *)"
+    ]
+  }
+}

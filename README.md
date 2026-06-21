@@ -1,0 +1,125 @@
+# Sybil — Identity-impact detection
+
+> For identity & access vendors: detect which **paying tenant** is silently exposed when offboarding silently fails — ranked by revenue at risk.
+
+**Who it's for:** identity / SSO / IGA vendors (Okta-likes). Their `accounts` are enterprise **tenants** that pay ARR.
+
+**The problem:** a tenant terminates an employee in their HRIS → a deprovisioning webhook fires to the vendor → it **silently fails** (a malformed payload — `effective_date` misnamed, the termination record skipped). The departed user's SSO session and entitlements stay **live**. Nobody notices until it's a breach.
+
+Sybil ingests the vendor's identity telemetry and tells them *which paying tenant is exposed right now, and how much renewal that puts at risk.*
+
+---
+
+## Why Aurora PostgreSQL (one sentence)
+
+**Sybil runs two complementary detection strategies over one normalized identity-telemetry landing table — statistical rate-anomaly baselining on deprovisioning-sync failures and exposure scoring on discrete stale-access violations — unified into a single revenue-weighted risk ranking, all in SQL.** That dual-signal correlation (window functions, `STDDEV_POP`, `MODE() WITHIN GROUP`, time-window CTEs, blast-radius math) belongs *in the database* — Aurora runs it at scale behind a serverless-friendly pooled endpoint.
+
+---
+
+## The core query (this *is* the product)
+
+Two detectors, one landing table, one risk score — defined in [`src/db/queries.ts`](src/db/queries.ts), exposed live via `/api/revenue-at-risk`, and viewable in-app via **"View query"**. The *right detector for each signal*:
+
+- **Rate anomaly (z-score).** High-volume deprovisioning-sync failures are baselined per tenant over a trailing **7-day hourly window**; a live burst that exceeds the tenant's own `mu + 3σ` (and a floor) is the **leading indicator**. *"Acme's sync-failure rate is 16× its baseline."*
+- **Exposure scoring.** Discrete `stale_access` violations are **rare and high-severity** — a baseline of zero, so z-score is the *wrong* tool. They're scored by **blast radius × sensitivity × dwell time**: one terminated Super-Admin still holding a live session is already a P1.
+- **Blended risk score** `= 0.35·ARR + 0.30·exposure + 0.20·anomaly + 0.15·renewal-proximity`, `ORDER BY risk_score DESC` — so a whale with a confirmed exposure near renewal outranks a bigger tenant whose pipeline is merely wobbling.
+
+A tenant surfaces when it is **anomalous OR carries an open exposure**. The full annotated CTE query is the showpiece behind the **View query** button.
+
+## Data model
+
+Four tables, defined with Drizzle in [`src/db/schema.ts`](src/db/schema.ts):
+
+| table | role |
+| --- | --- |
+| `accounts` | the vendor's tenants — `tier`, `arr` (the dollar weight), `csm_owner`, `renewal_date`, `region` |
+| `telemetry_events` | one normalized landing table, four semantics — `event_type` (`error`\|`latency`\|`stale_access`\|`policy_violation`), `severity`, `error_signature`, `subject` (the identity actor), `occurred_at` |
+| `tickets` | a linked case from the tenant's own tooling — fetched live as context on the incident page |
+| `outreach` | human-in-the-loop draft **and** the incident record — `draft_body`, `approved_by`, and the lifecycle `incident_status` (active\|resolved) × `outreach_status` (none\|initial_sent\|resolution_sent) |
+
+> **Where ARR comes from:** `accounts` is master data. In production it's upserted by `external_ref` from the system of record (CRM / billing — Salesforce, Stripe) the same any-source-into-Aurora way telemetry lands through `/api/ingest`; a "sync" is just a thin adapter that calls that upsert, not a poller. The seed bootstraps it. (This keeps the revenue weighting in the risk score honest — the dollar figures trace back to billing, not to hand-entered numbers.)
+
+## The surfaces
+
+0. **Landing + SSO gate** (`/` → `/login`) — a one-screen orientation (what it does, who it's for, the one-sentence Aurora pitch) behind a themed **"Sign in with SSO"** curtain. On-thesis (Sybil's customers *are* SSO vendors) and clearly labelled a demo, not real auth. Signing in resets to calm, warms the cluster, and drops you into the command center — which holds green a beat, then **auto-fires the incident**, so an unattended judge sees the full green→red arc without clicking. Manual Trigger/Reset controls stay for driving it live.
+1. **Command center** (hero) — a live metrics band (Monitored ARR, accounts, errors/min, a continuous fleet-telemetry sparkline) beside the emotional centerpiece: a large **Revenue-at-Risk** figure that rests at a calm green `$0` and counts up into pulsing red the instant real dollars are erroring.
+2. **Fleet constellation** — the whole book of business as a field of living dots, one per account, **sized by ARR**. A gently breathing sea of green at rest; affected dots flare red and float to the front on impact. Click a dot to open its incident page.
+3. **Account-status feed** — one always-on table, sorted active-first then by ARR; rows slide into place as order changes. Each affected row walks a derived status — `Impacted` (red) → `Notified` (amber) → `Resolved` (calm green). Includes **View query**.
+4. **Incident page** (`/incidents/[accountId]`) — a **"Why Sybil flagged this tenant"** panel making the dual signal legible (the rate anomaly *N× baseline* beside the confirmed stale-access exposure — subject, entitlement, dwell time — and the risk score); the sync-failure timeline; and the human-in-the-loop outreach lifecycle: edit the draft → **Send** → **Mark resolved** → **Send resolution update**. Nothing sends without a human's name on it.
+
+> **Design discipline:** a calm-but-alive command center at rest — gently breathing green, monitored-ARR ticking — that *escalates* into red as an incident fires (Revenue-at-Risk counting up, dots flaring, an ambient screen-edge glow). The saturated red is reserved exclusively for genuine impact, so the escalation reads as real, not decorative.
+
+---
+
+## Run locally
+
+Requires Node 18+ and pnpm. You need a Postgres reachable at `DATABASE_URL` — local Docker is fine for the demo, Aurora for production.
+
+```bash
+pnpm install
+
+# 1. Start a local Postgres (or point DATABASE_URL at Aurora)
+docker run -d --name sybil-pg \
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=sybil \
+  -p 5432:5432 postgres:16-alpine
+
+# 2. Configure env
+cp .env.example .env.local        # default URL already points at the container above
+
+# 3. Create the schema + seed ~20 healthy tenants and their 7-day baseline (all green)
+pnpm db:push
+pnpm db:seed
+
+# 4. Run
+pnpm dev                          # http://localhost:3000
+```
+
+### Demo flow (≈40 seconds)
+
+1. Open the app → **Sign in with SSO** (one click). The command center loads all green, **0 tenants at risk** (every tenant has a low baseline sync-failure hum; none is anomalous) — then, after a beat, the incident **fires itself**. (Driving it live? Use the **Trigger incident** button instead.)
+2. Four tenants' deprovisioning pipelines start failing; two (Acme, Helios) also surface a confirmed stale-access violation. The dashboard flips to red: toast + banner, rows sorted by **risk score** — **Acme #1** (`exposure + anomaly`, terminated Super-Admin exposed 4h and caught at the first failures, renews in 23d) above the anomaly-only tenants.
+3. Click Acme → the **"Why Sybil flagged this tenant"** panel: *16× baseline* sync failures beside the confirmed exposure (`jane.doe@acme.com` · Okta Super Admin · exposed 4h, flagged at the first failures), with the risk score. Hit **Check for related tickets** — Acme comes back *silent* ("the customer hasn't reported this"), which is the whole point.
+4. Edit the outreach draft → **Send** (logs to the server console, or posts to `SLACK_WEBHOOK_URL`). The row turns amber `Notified`.
+5. **Mark resolved**, then **Send resolution update** — the row settles to calm green `Resolved`.
+6. Hit **View query** to show the live dual-signal CTE SQL.
+7. Click **Reset** — the incident clears but the 7-day baseline survives.
+
+## Scripts
+
+| command | does |
+| --- | --- |
+| `pnpm dev` | run the app |
+| `pnpm db:push` | create/sync the schema (Drizzle Kit, `--force`) |
+| `pnpm db:seed` | reset + seed ~20 healthy tenants and their 7-day sync-failure baseline |
+| `pnpm db:studio` | browse the data in Drizzle Studio |
+| `pnpm build` | production build |
+
+---
+
+## Deploying to AWS + Vercel
+
+Infra is in [`terraform/`](terraform/): a minimal VPC and **Aurora Serverless v2 (PostgreSQL)** configured to **scale to zero** (`min_capacity = 0`) so an idle cluster costs ~nothing — right for an app that sits unattended through a multi-week judging window. No RDS Proxy (it holds open connections, which blocks scale-to-zero); Sybil's `pg` Pool is cached on `globalThis` per warm container instead ([`src/db/index.ts`](src/db/index.ts)).
+
+1. **Provision:** `cd terraform && terraform init && terraform apply` (set `local_admin_cidr` to your IP/32). Note the outputs.
+2. **Migrate + seed** from your laptop over TCP: `DATABASE_URL=<aurora endpoint> pnpm db:push && pnpm db:seed`.
+3. **Set Vercel env vars** and deploy (`vercel --prod`). All API routes are `force-dynamic` and carry `maxDuration = 60` so the first request can wait out a scale-to-zero resume instead of timing out.
+
+**Two ways the app reaches the DB** (`src/db/index.ts`):
+
+- **Direct TCP (default):** `DATABASE_URL` → the Aurora cluster endpoint. Simplest, and it's the tested path — but Vercel has no fixed egress IP, so it requires `enable_public_db_access = true` (5432 open to `0.0.0.0/0`). Acceptable only for a short-lived cluster; **not** for weeks of unattended uptime.
+- **RDS Data API (recommended for a long-lived deploy):** `USE_DATA_API=true` + `RDS_RESOURCE_ARN` / `RDS_SECRET_ARN` / `AWS_REGION` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (all `terraform output`s). HTTPS + IAM, **no open port**, no connection pool to keep warm — the right fit for Vercel + scale-to-zero.
+
+**Cutover to the Data API** (closes the public-Postgres exposure):
+1. Set the `USE_DATA_API` + `RDS_*` + `AWS_*` env vars in Vercel; redeploy.
+2. Verify the dashboard loads and **View query** returns rows. ⚠️ The Data API path can't be exercised against local Postgres — validate it against real Aurora here before the next step.
+3. `terraform apply -var enable_public_db_access=false` — removes the `0.0.0.0/0` rule. The admin-IP rule (for seeding) stays.
+
+> **Cold start:** a paused cluster takes ~15–30s to resume; the app shows a "Resuming Aurora Serverless v2 from zero…" screen on first load (`maxDuration = 60` keeps the request alive through it). To avoid it entirely for a live demo, set `aurora_min_acu = 0.5` for the demo window (~$0.06/hr) so it never pauses. **Cost:** keep your own `pnpm dev` on local Docker — a browser left open on the dashboard polls every 5s and prevents the cluster from ever pausing.
+
+## Stack
+
+Next.js (App Router) · TypeScript · Tailwind + shadcn/ui · Drizzle ORM · Aurora PostgreSQL · recharts · Sonner.
+
+## Out of scope (intentionally)
+
+No auth, user management, settings, onboarding, multi-tenancy, or real Slack OAuth. Single demo workspace — every hour outside the four surfaces is wasted.
