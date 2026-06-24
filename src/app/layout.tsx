@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 export const metadata: Metadata = {
   title: "Sybil — Identity-impact detection",
   description:
-    "For identity & access vendors: detect which paying tenant is silently exposed by failed deprovisioning, ranked by revenue at risk.",
+    "For identity & access vendors: detect which customer is silently exposed by identity failure, ranked by revenue at risk.",
 };
 
 export default function RootLayout({

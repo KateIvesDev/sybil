@@ -108,7 +108,7 @@ export const INCIDENT_PROFILES: Record<string, IncidentProfile> = {
     },
     exposure: {
       subject: "jane.doe@acme.com",
-      entitlement: "Okta Super Admin · live SSO session",
+      entitlement: "Super Admin · live SSO session",
       signature:
         "StaleAccess: terminated employee retains active session + Super Admin entitlement",
       termedHoursAgo: 4,
@@ -197,7 +197,7 @@ export function draftOutreach(
     const who = subject ? ` (${subject})` : "";
     return `Hi ${accountName} team,
 
-This is ${csmOwner} from your account team. Sybil detected a burst of ${errorCount} failed deprovisioning events on ${endpoint} in the last hour, and has confirmed at least one terminated identity${who} that still holds live access as a result. We caught it at the first failures and are reaching out before it becomes a security exposure on your side.
+This is ${csmOwner} from your account team. We detected a burst of ${errorCount} failed deprovisioning events on ${endpoint} in the last hour, and has confirmed at least one terminated identity${who} that still holds live access as a result. We caught it at the first failures and are reaching out before it becomes a security exposure on your side.
 
 Our team is already reprocessing the affected offboarding records and revoking the stale sessions. You don't need to do anything; we'll confirm once every entitlement is fully cleared.
 
@@ -209,7 +209,7 @@ Apologies for the disruption, and thank you for your partnership.
   // Anomaly only — no confirmed exposure. This is a leading indicator; say so.
   return `Hi ${accountName} team,
 
-This is ${csmOwner} from your account team. Sybil detected an abnormal spike — ${errorCount} failed deprovisioning events on ${endpoint} in the last hour, well above your normal baseline. No terminated identity has been confirmed exposed yet, and we're investigating now to keep it that way.
+This is ${csmOwner} from your account team. We detected an abnormal spike — ${errorCount} failed deprovisioning events on ${endpoint} in the last hour. No terminated identity has been confirmed exposed yet, and we're investigating now to keep it that way.
 
 Our team is already reprocessing the affected offboarding records before any access can leak. You don't need to do anything; we'll confirm once the sync pipeline is healthy again.
 

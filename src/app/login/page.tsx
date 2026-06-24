@@ -57,7 +57,7 @@ export default function Login() {
           </div>
           <h1 className="text-lg font-semibold">Sign in to Sybil</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Identity-impact detection for your book of tenants.
+            Identity-impact detection for your book of customers.
           </p>
 
           <Button
@@ -89,7 +89,7 @@ export default function Login() {
             </p>
           )}
 
-          <p className="mt-6 border-t border-border pt-4 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="mt-6 border-t border-border pt-4 text-sm leading-relaxed text-muted-foreground">
             Demo environment — single-click SSO, no real authentication. Sybil&apos;s
             actual customers authenticate their tenants via SSO; this mirrors that.
           </p>

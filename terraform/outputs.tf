@@ -5,7 +5,7 @@ output "aurora_cluster_endpoint" {
 
 output "database_url" {
   description = "Connection string for both local migrations/seeding and Vercel env vars — password omitted, pull from Secrets Manager. Use a pooled/serverless-friendly Drizzle driver since there's no RDS Proxy in front of this."
-  value       = "postgresql://${var.db_username}:<PASSWORD_FROM_SECRETS_MANAGER>@${aws_rds_cluster.sybil.endpoint}:5432/sybil?sslmode=require"
+  value       = "postgresql://${var.db_username}:<PASSWORD_FROM_SECRETS_MANAGER>@${aws_rds_cluster.sybil.endpoint}:5432/sybil?sslmode=no-verify"
 }
 
 output "rds_data_api_enabled" {

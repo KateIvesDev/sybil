@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 // TODO: set this to your Sybil repo before submitting.
-const GITHUB_URL = "https://github.com/your-username/sybil";
+const GITHUB_URL = "https://github.com/kateivesdev/sybil";
 
 /**
  * Landing page — positions Sybil as a detection ENGINE for identity failure
@@ -61,19 +61,15 @@ export default function Landing() {
         >
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-sm text-muted-foreground">
             <ShieldAlert className="h-3.5 w-3.5 text-destructive" />
-            Detection engine for identity failure modes
+            CX Detection Engine for Identity Failures
           </div>
           <h1 className="text-balance text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
-            When identity breaks for a key account,{" "}
-            <span className="text-destructive">reach the customer first</span>.
+            Reach your key accounts <span className="text-destructive">before</span> they open a support ticket.
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground">
-            SSO outages, failed deprovisioning, MFA failures, policy drift — Sybil
-            watches your identity telemetry, catches the failure the moment it
-            hits a paying account, ranks who&apos;s affected by the revenue on the
-            line, and drafts the outreach so your Customer Success team gets ahead
-            of it before the customer finds out the hard way. Nothing sends without
-            a human&apos;s name on it.
+          <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground">
+
+            Sybil watches your deprovisioning and identity access signals in real time, <br/> so CX teams reach at-risk accounts before a failure becomes a ticket <br/> — <span className="font-bold">or worse, a churned account</span>.
+
           </p>
           <div className="mt-8 flex items-center justify-center gap-3">
             <Button size="lg" asChild>
@@ -128,7 +124,7 @@ export default function Landing() {
             <h2 className="text-xl font-semibold">
               One engine. Every identity failure mode.
             </h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
+            <p className="mx-auto mt-2 max-w-xl text-base text-muted-foreground">
               Each failure mode is one event type and a signature on the same
               landing table. Adding one is new data, not a new system — the two
               detectors and the revenue ranking never change.
@@ -170,10 +166,10 @@ export default function Landing() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="mx-auto my-16 max-w-3xl rounded-xl border border-border bg-card p-6"
         >
-          <div className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="text-base font-medium uppercase tracking-wide text-muted-foreground">
             Why Aurora PostgreSQL
           </div>
-          <p className="mt-2 text-pretty text-sm leading-relaxed">
+          <p className="mt-2 text-pretty text-base leading-relaxed">
             Most apps would treat the database as storage and run this detection
             in application code. Sybil runs it <strong>in the database</strong> —
             two complementary detection strategies over one normalized landing
@@ -217,7 +213,7 @@ function ArcStep({
           Step {n}
         </span>
       </div>
-      <div className="text-sm font-semibold">{title}</div>
+      <div className="text-base font-semibold">{title}</div>
       <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
         {body}
       </p>
@@ -241,12 +237,12 @@ function FailureColumn({
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted/50">
+        <div className="flex h-12 w-12 items-center justify-center rounded-md bg-muted/50">
           {icon}
         </div>
         <div>
-          <div className="text-sm font-semibold">{title}</div>
-          <div className="text-xs text-muted-foreground">{caption}</div>
+          <div className="text-base font-semibold">{title}</div>
+          <div className="text-sm text-muted-foreground">{caption}</div>
         </div>
       </div>
       <ul className="mt-4 space-y-2">

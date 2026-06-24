@@ -11,9 +11,9 @@ variable "db_username" {
 }
 
 variable "aurora_engine_version" {
-  description = "Aurora PostgreSQL engine version. Must be 15.7+ (or 13.15+/14.12+/16.3+) to support scaling to 0 ACUs — versions below this silently can't auto-pause."
+  description = "Aurora PostgreSQL engine version. Must be 15.7+ (or 13.15+/14.12+/16.3+) to support scaling to 0 ACUs — versions below this silently can't auto-pause. NOTE: AWS retires minor versions over time; if apply fails with 'Cannot find version X', run `aws rds describe-db-engine-versions --engine aurora-postgresql` to see what's currently offered in your region."
   type        = string
-  default     = "15.7"
+  default     = "15.8"
 }
 
 variable "aurora_min_acu" {
@@ -40,7 +40,7 @@ variable "aurora_auto_pause_seconds" {
 variable "enable_public_db_access" {
   description = "Open Postgres 5432 to 0.0.0.0/0 so Vercel (no fixed egress IP) can connect over TCP. SECURITY: exposes the DB to the public internet. Set FALSE once the app is cut over to the RDS Data API (HTTPS + IAM, no open port) — see README. The local-admin-IP ingress (for seeding) stays regardless."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "local_admin_cidr" {

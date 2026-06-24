@@ -2,7 +2,7 @@
  * Slack — notification only.
  *
  * Sybil posts a heads-up to #sybil-alert the moment it detects an impacted
- * account (an error burst against a paying customer). The message is purely
+ * account (an error burst against a customer). The message is purely
  * informational: it @-mentions the CSM owner and links out to the incident page
  * where the human actually reviews the AI draft and sends it. There are NO
  * interactive Slack buttons — Slack never approves anything; it just notifies and

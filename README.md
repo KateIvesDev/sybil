@@ -1,22 +1,22 @@
 # Sybil — Identity-impact detection
 
-> For identity & access vendors: detect which **paying tenant** is silently exposed when offboarding silently fails — ranked by revenue at risk.
+> For CX teams at identity & access vendors: detect which accounts are impacted by identity failures — ranked by revenue at risk - before they open a support ticket or become a churned account.
 
-**Who it's for:** identity / SSO / IGA vendors (Okta-likes). Their `accounts` are enterprise **tenants** that pay ARR.
+**Who it's for:** Identity / SSO / IGA vendors. Their `accounts` are enterprise **tenants** that pay ARR.
 
-**The problem:** a tenant terminates an employee in their HRIS → a deprovisioning webhook fires to the vendor → it **silently fails** (a malformed payload — `effective_date` misnamed, the termination record skipped). The departed user's SSO session and entitlements stay **live**. Nobody notices until it's a breach.
+**The problem:** Identity failures can cause a surge in support tickets, or even a renewal churn. 
 
-Sybil ingests the vendor's identity telemetry and tells them *which paying tenant is exposed right now, and how much renewal that puts at risk.*
+Sybil ingests the vendor's identity telemetry and tells them *which account is exposed to a failure right now*, and how much renewal that puts at risk, and enables CX teams to proactively reach out to key accounts.
 
 ---
 
-## Why Aurora PostgreSQL (one sentence)
+## Why Aurora PostgreSQ
 
 **Sybil runs two complementary detection strategies over one normalized identity-telemetry landing table — statistical rate-anomaly baselining on deprovisioning-sync failures and exposure scoring on discrete stale-access violations — unified into a single revenue-weighted risk ranking, all in SQL.** That dual-signal correlation (window functions, `STDDEV_POP`, `MODE() WITHIN GROUP`, time-window CTEs, blast-radius math) belongs *in the database* — Aurora runs it at scale behind a serverless-friendly pooled endpoint.
 
 ---
 
-## The core query (this *is* the product)
+## The Core Database Query
 
 Two detectors, one landing table, one risk score — defined in [`src/db/queries.ts`](src/db/queries.ts), exposed live via `/api/revenue-at-risk`, and viewable in-app via **"View query"**. The *right detector for each signal*:
 
@@ -78,7 +78,7 @@ pnpm dev                          # http://localhost:3000
 
 1. Open the app → **Sign in with SSO** (one click). The command center loads all green, **0 tenants at risk** (every tenant has a low baseline sync-failure hum; none is anomalous) — then, after a beat, the incident **fires itself**. (Driving it live? Use the **Trigger incident** button instead.)
 2. Four tenants' deprovisioning pipelines start failing; two (Acme, Helios) also surface a confirmed stale-access violation. The dashboard flips to red: toast + banner, rows sorted by **risk score** — **Acme #1** (`exposure + anomaly`, terminated Super-Admin exposed 4h and caught at the first failures, renews in 23d) above the anomaly-only tenants.
-3. Click Acme → the **"Why Sybil flagged this tenant"** panel: *16× baseline* sync failures beside the confirmed exposure (`jane.doe@acme.com` · Okta Super Admin · exposed 4h, flagged at the first failures), with the risk score. Hit **Check for related tickets** — Acme comes back *silent* ("the customer hasn't reported this"), which is the whole point.
+3. Click Acme → the **"Why Sybil flagged this tenant"** panel: *16× baseline* sync failures beside the confirmed exposure (`jane.doe@acme.com` · Super Admin · exposed 4h, flagged at the first failures), with the risk score. Hit **Check for related tickets** — Acme comes back *silent* ("the customer hasn't reported this"), which is the whole point.
 4. Edit the outreach draft → **Send** (logs to the server console, or posts to `SLACK_WEBHOOK_URL`). The row turns amber `Notified`.
 5. **Mark resolved**, then **Send resolution update** — the row settles to calm green `Resolved`.
 6. Hit **View query** to show the live dual-signal CTE SQL.
@@ -98,23 +98,62 @@ pnpm dev                          # http://localhost:3000
 
 ## Deploying to AWS + Vercel
 
-Infra is in [`terraform/`](terraform/): a minimal VPC and **Aurora Serverless v2 (PostgreSQL)** configured to **scale to zero** (`min_capacity = 0`) so an idle cluster costs ~nothing — right for an app that sits unattended through a multi-week judging window. No RDS Proxy (it holds open connections, which blocks scale-to-zero); Sybil's `pg` Pool is cached on `globalThis` per warm container instead ([`src/db/index.ts`](src/db/index.ts)).
+The database runs on AWS (provisioned by [`terraform/`](terraform/)); the app runs on Vercel and connects back to it. The infra is a minimal VPC and **Aurora Serverless v2 (PostgreSQL)** configured to **scale to zero** (`min_capacity = 0`) so an idle cluster costs ~nothing — right for an app that sits unattended through a multi-week judging window. No RDS Proxy (it holds open connections, which blocks scale-to-zero); Sybil's `pg` Pool is cached on `globalThis` per warm container instead ([`src/db/index.ts`](src/db/index.ts)).
 
-1. **Provision:** `cd terraform && terraform init && terraform apply` (set `local_admin_cidr` to your IP/32). Note the outputs.
-2. **Migrate + seed** from your laptop over TCP: `DATABASE_URL=<aurora endpoint> pnpm db:push && pnpm db:seed`.
-3. **Set Vercel env vars** and deploy (`vercel --prod`). All API routes are `force-dynamic` and carry `maxDuration = 60` so the first request can wait out a scale-to-zero resume instead of timing out.
+**Prerequisites:** AWS credentials (`aws sts get-caller-identity` to confirm), Terraform ≥ 1.5, and the Vercel CLI.
 
-**Two ways the app reaches the DB** (`src/db/index.ts`):
+### 1. Provision the database
 
-- **Direct TCP (default):** `DATABASE_URL` → the Aurora cluster endpoint. Simplest, and it's the tested path — but Vercel has no fixed egress IP, so it requires `enable_public_db_access = true` (5432 open to `0.0.0.0/0`). Acceptable only for a short-lived cluster; **not** for weeks of unattended uptime.
-- **RDS Data API (recommended for a long-lived deploy):** `USE_DATA_API=true` + `RDS_RESOURCE_ARN` / `RDS_SECRET_ARN` / `AWS_REGION` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (all `terraform output`s). HTTPS + IAM, **no open port**, no connection pool to keep warm — the right fit for Vercel + scale-to-zero.
+```bash
+cd terraform
+# Set local_admin_cidr to your public IP/32 in terraform.tfvars — this opens 5432
+# to just your laptop for the seed step. Find it: curl -s https://checkip.amazonaws.com
+terraform init
+terraform apply          # ~10–15 min; Aurora cluster creation is the slow part
+terraform output         # note the endpoint + ARNs (some are -raw / sensitive)
+```
 
-**Cutover to the Data API** (closes the public-Postgres exposure):
+### 2. Migrate + seed (from your laptop, over TCP)
+
+```bash
+cd ..
+# The password lives in Secrets Manager, not the outputs — fetch it:
+PASS=$(aws secretsmanager get-secret-value --secret-id sybil/aurora/credentials \
+  --query SecretString --output text | jq -r .password)
+export DATABASE_URL="postgresql://sybil_admin:${PASS}@<endpoint>:5432/sybil?sslmode=no-verify"   # NOT sslmode=require — newer pg rejects the RDS CA chain
+
+pnpm db:push             # create schema
+pnpm db:seed             # load demo data — keep this on direct TCP; the Data API is slow for bulk inserts
+```
+
+### 3. Deploy the app
+
+```bash
+# Set the DB env vars in Vercel (see "How the app reaches the DB" below), then:
+vercel --prod
+```
+
+All API routes are `force-dynamic` with `maxDuration = 60`, so the first request can wait out a scale-to-zero resume instead of timing out.
+
+### How the app reaches the DB
+
+Two paths, switched by env vars ([`src/db/index.ts`](src/db/index.ts)):
+
+| | **Direct TCP** (default) | **RDS Data API** (recommended for a long-lived deploy) |
+|---|---|---|
+| Env vars | `DATABASE_URL` → cluster endpoint | `USE_DATA_API=true` + `RDS_RESOURCE_ARN` / `RDS_SECRET_ARN` / `AWS_REGION` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (all `terraform output`s) |
+| Transport | TCP — needs `enable_public_db_access = true` (5432 open to `0.0.0.0/0`, since Vercel has no fixed egress IP) | HTTPS + IAM, **no open port**, no pool to keep warm |
+| Use when | Quick demo on a short-lived cluster. **Not** for weeks of unattended uptime | Anything long-lived — the right fit for Vercel + scale-to-zero |
+
+**Recommended order:** deploy on direct TCP first (it's the tested path) to get a working demo fast, then cut over to the Data API to close the public exposure:
+
 1. Set the `USE_DATA_API` + `RDS_*` + `AWS_*` env vars in Vercel; redeploy.
 2. Verify the dashboard loads and **View query** returns rows. ⚠️ The Data API path can't be exercised against local Postgres — validate it against real Aurora here before the next step.
 3. `terraform apply -var enable_public_db_access=false` — removes the `0.0.0.0/0` rule. The admin-IP rule (for seeding) stays.
 
 > **Cold start:** a paused cluster takes ~15–30s to resume; the app shows a "Resuming Aurora Serverless v2 from zero…" screen on first load (`maxDuration = 60` keeps the request alive through it). To avoid it entirely for a live demo, set `aurora_min_acu = 0.5` for the demo window (~$0.06/hr) so it never pauses. **Cost:** keep your own `pnpm dev` on local Docker — a browser left open on the dashboard polls every 5s and prevents the cluster from ever pausing.
+>
+> **Teardown:** `cd terraform && terraform destroy`. `skip_final_snapshot = true` is set, so it's clean and immediate.
 
 ## Stack
 

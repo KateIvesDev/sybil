@@ -2,6 +2,24 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+minimumReleaseAgeExclude:
+  - esbuild@0.25.12
+  - next@15.2.2
+  - next@15.4.5
+  - next@15.4.7
+  - next@15.5.10
+  - next@15.1.12
+  - next@15.2.3
+  - next@15.5.13
+  - next@15.5.14
+  - drizzle-orm@0.45.2
+  - next@15.5.15
+  - postcss@8.5.10
+  - next@15.5.16
 onlyBuiltDependencies:
   - esbuild
   - sharp
+overrides:
+  drizzle-orm@<0.45.2: ^0.45.2
+  esbuild@<=0.24.2: '>=0.24.3'
+  postcss@<8.5.10: ^8.5.10
