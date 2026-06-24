@@ -330,7 +330,7 @@ export async function getAccountDrilldown(
   const accountRes = await db.execute(sql`
     SELECT id, name, tier, arr, csm_owner AS "csmOwner", region,
            renewal_date AS "renewalDate"
-    FROM accounts WHERE id = ${accountId}
+    FROM accounts WHERE id = (${accountId})::uuid
   `);
   if (accountRes.rows.length === 0) return null;
   const a = accountRes.rows[0] as Record<string, unknown>;
@@ -342,7 +342,7 @@ export async function getAccountDrilldown(
       COUNT(*)::int                     AS errors,
       MAX(severity)::int                AS "maxSeverity"
     FROM telemetry_events
-    WHERE account_id = ${accountId}
+    WHERE account_id = (${accountId})::uuid
       AND event_type = 'error'
       AND occurred_at >= now() - (${windowMinutes} || ' minutes')::interval
     GROUP BY 1
@@ -355,7 +355,7 @@ export async function getAccountDrilldown(
       MIN(occurred_at)                        AS "firstSeen",
       COUNT(*)::int                           AS "totalErrors"
     FROM telemetry_events
-    WHERE account_id = ${accountId}
+    WHERE account_id = (${accountId})::uuid
       AND event_type = 'error'
       AND occurred_at >= now() - (${windowMinutes} || ' minutes')::interval
   `);
