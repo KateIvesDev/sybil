@@ -43,6 +43,12 @@ variable "enable_public_db_access" {
   default     = false
 }
 
+variable "publicly_accessible" {
+  description = "Give the Aurora instance a public endpoint so direct TCP works over the internet. Needed for the default TCP path and for laptop seeding. Set FALSE for the fully hardened end-state once the app runs on the RDS Data API (HTTPS + IAM, no public endpoint) — re-enable briefly if you need to re-seed over TCP. Defaults TRUE so first-time setup is easy."
+  type        = bool
+  default     = true
+}
+
 variable "local_admin_cidr" {
   description = "Your local IP in CIDR form (e.g. 1.2.3.4/32) — allowed to connect directly for migrations/seeding. Find yours at https://whatismyip.com"
   type        = string

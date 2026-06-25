@@ -10,7 +10,7 @@ Sybil ingests the vendor's identity telemetry and tells them *which account is e
 
 ---
 
-## Why Aurora PostgreSQ
+## Why Aurora PostgreSQL
 
 **Sybil runs two complementary detection strategies over one normalized identity-telemetry landing table — statistical rate-anomaly baselining on deprovisioning-sync failures and exposure scoring on discrete stale-access violations — unified into a single revenue-weighted risk ranking, all in SQL.** That dual-signal correlation (window functions, `STDDEV_POP`, `MODE() WITHIN GROUP`, time-window CTEs, blast-radius math) belongs *in the database* — Aurora runs it at scale behind a serverless-friendly pooled endpoint.
 
@@ -69,6 +69,7 @@ cp .env.example .env.local        # default URL already points at the container 
 # 3. Create the schema + seed ~20 healthy tenants and their 7-day baseline (all green)
 pnpm db:push
 pnpm db:seed
+pnpm db:matview                   # build the baseline rollup + partial indexes (see docs/PERFORMANCE.md)
 
 # 4. Run
 pnpm dev                          # http://localhost:3000
@@ -91,7 +92,9 @@ pnpm dev                          # http://localhost:3000
 | `pnpm dev` | run the app |
 | `pnpm db:push` | create/sync the schema (Drizzle Kit, `--force`) |
 | `pnpm db:seed` | reset + seed ~20 healthy tenants and their 7-day sync-failure baseline |
+| `pnpm db:matview` | create the baseline materialized view + partial indexes; schedule pg_cron refresh on Aurora ([`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)) |
 | `pnpm db:studio` | browse the data in Drizzle Studio |
+| `pnpm demo:webhook [url] [count] [account_ref]` | fire a burst of **real raw Sentry webhooks** at `/api/webhooks/sentry` — the live "this is a real provider pipeline" demo |
 | `pnpm build` | production build |
 
 ---
@@ -124,7 +127,13 @@ export DATABASE_URL="postgresql://sybil_admin:${PASS}@<endpoint>:5432/sybil?sslm
 
 pnpm db:push             # create schema
 pnpm db:seed             # load demo data — keep this on direct TCP; the Data API is slow for bulk inserts
+pnpm db:matview          # create mv_hourly_error_counts + partial indexes; schedules pg_cron refresh on Aurora
 ```
+
+> **Order matters:** run `db:matview` after `db:seed`. The correlation query reads the
+> baseline from `mv_hourly_error_counts`, so the view must exist or `/api/revenue-at-risk`
+> errors with `relation "mv_hourly_error_counts" does not exist`. Re-run `db:matview`
+> (or hit `/api/cron/refresh-baseline`) after any re-seed. See [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
 
 ### 3. Deploy the app
 
@@ -145,11 +154,22 @@ Two paths, switched by env vars ([`src/db/index.ts`](src/db/index.ts)):
 | Transport | TCP — needs `enable_public_db_access = true` (5432 open to `0.0.0.0/0`, since Vercel has no fixed egress IP) | HTTPS + IAM, **no open port**, no pool to keep warm |
 | Use when | Quick demo on a short-lived cluster. **Not** for weeks of unattended uptime | Anything long-lived — the right fit for Vercel + scale-to-zero |
 
-**Recommended order:** deploy on direct TCP first (it's the tested path) to get a working demo fast, then cut over to the Data API to close the public exposure:
+**Recommended order:** deploy on direct TCP first (it's the tested path) to get a working
+demo fast, then cut over to the Data API for the **hardened end-state** — no public DB
+endpoint, no open port, IAM-authed over HTTPS:
 
 1. Set the `USE_DATA_API` + `RDS_*` + `AWS_*` env vars in Vercel; redeploy.
 2. Verify the dashboard loads and **View query** returns rows. ⚠️ The Data API path can't be exercised against local Postgres — validate it against real Aurora here before the next step.
-3. `terraform apply -var enable_public_db_access=false` — removes the `0.0.0.0/0` rule. The admin-IP rule (for seeding) stays.
+3. Close the public surface:
+   ```bash
+   terraform apply -var enable_public_db_access=false -var publicly_accessible=false
+   ```
+   `enable_public_db_access=false` removes the `0.0.0.0/0` SG rule; `publicly_accessible=false`
+   removes the instance's public endpoint entirely. The admin-IP `/32` rule stays. To
+   re-seed later, flip `publicly_accessible=true` briefly (the app keeps running on the
+   Data API throughout — it never used the endpoint).
+4. Verify the hole is closed: the cluster SG should show only your admin `/32` on 5432,
+   and a TCP connect from any other IP should be refused.
 
 > **Cold start:** a paused cluster takes ~15–30s to resume; the app shows a "Resuming Aurora Serverless v2 from zero…" screen on first load (`maxDuration = 60` keeps the request alive through it). To avoid it entirely for a live demo, set `aurora_min_acu = 0.5` for the demo window (~$0.06/hr) so it never pauses. **Cost:** keep your own `pnpm dev` on local Docker — a browser left open on the dashboard polls every 5s and prevents the cluster from ever pausing.
 >

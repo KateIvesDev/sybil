@@ -1,0 +1,29 @@
+{
+  "action": "triggered",
+  "data": {
+    "event": {
+      "event_id": "evt_REPLACED_PER_SEND",
+      "project": "acme-prod",
+      "level": "fatal",
+      "platform": "node",
+      "timestamp": "2026-06-20T17:42:03.000Z",
+      "request": {
+        "url": "https://api.acme.io/scim/v2/Users/deprovision?async=true",
+        "method": "POST"
+      },
+      "exception": {
+        "values": [
+          {
+            "type": "DeprovisionSyncTimeout",
+            "value": "SCIM upstream 504 — user deactivation not propagated to downstream app"
+          }
+        ]
+      },
+      "contexts": { "response": { "status_code": 500 } },
+      "tags": [
+        ["environment", "production"],
+        ["account_ref", "ext_acme_industries"]
+      ]
+    }
+  }
+}

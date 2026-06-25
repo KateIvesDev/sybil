@@ -57,20 +57,20 @@ WITH
 -- (1) Per-tenant BASELINE of normal sync failures: hourly 'error' counts over the
 --     trailing 7 days, EXCLUDING the live window so the spike can't bias its own
 --     baseline. sigma floored at 1 so near-constant tenants don't explode the z.
+--
+--     The hourly rollup is read from the materialized view mv_hourly_error_counts
+--     (refreshed every ~10 min by pg_cron) instead of rescanning a week of raw
+--     events on every 5s poll — the baseline is a slow-moving 7-day average, so
+--     it does not need per-request recomputation. The LIVE window (sync_recent /
+--     exposure below) stays on raw telemetry_events so a fresh burst still
+--     surfaces within one poll. See src/db/migrations/manual/0003_baseline_matview.sql.
 baseline AS (
   SELECT account_id,
          AVG(cnt)                                  AS mu,
          GREATEST(COALESCE(STDDEV_POP(cnt), 0), 1) AS sigma
-  FROM (
-    SELECT account_id,
-           date_trunc('hour', occurred_at) AS h,
-           COUNT(*)::numeric               AS cnt
-    FROM telemetry_events
-    WHERE event_type = 'error'
-      AND occurred_at >= now() - interval '7 days'
-      AND occurred_at <  now() - interval '${win} minutes'
-    GROUP BY account_id, date_trunc('hour', occurred_at)
-  ) hourly
+  FROM mv_hourly_error_counts
+  WHERE hour >= date_trunc('hour', now()) - interval '7 days'
+    AND hour <  date_trunc('hour', now() - interval '${win} minutes')
   GROUP BY account_id
 ),
 -- (2) RECENT sync failures in the live window — the anomaly numerator.
@@ -156,6 +156,19 @@ ORDER BY "riskScore" DESC;`;
 
 // Display constant (default window) for the "View query" dialog.
 export const REVENUE_AT_RISK_SQL = buildRevenueAtRiskSql(60);
+
+// ── Baseline rollup refresh ────────────────────────────────────────────────
+// Recompute the materialized hourly-error rollup the baseline CTE reads from
+// (see src/db/migrations/manual/0003_baseline_matview.sql). On Aurora this runs
+// every ~10 min via pg_cron; this helper is the manual/fallback trigger, called
+// by /api/cron/refresh-baseline (Vercel Cron) and after a re-seed. CONCURRENTLY
+// keeps reads live during the refresh (needs the unique index on account_id,hour)
+// and is a single statement, so it works over both the pg and Data API drivers.
+export async function refreshBaselineMatview(): Promise<void> {
+  await db.execute(
+    sql.raw("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_hourly_error_counts"),
+  );
+}
 
 export async function getRevenueAtRisk(
   windowMinutes = 60,

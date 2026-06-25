@@ -181,11 +181,13 @@ resource "aws_rds_cluster_instance" "sybil" {
   instance_class     = "db.serverless"
   engine             = aws_rds_cluster.sybil.engine
   engine_version     = aws_rds_cluster.sybil.engine_version
-  # REQUIRED for this architecture: without it the instance defaults to private,
-  # so neither Vercel nor your laptop (over the internet) can reach the cluster
-  # endpoint — despite the public subnets, IGW, and open SG. This is the single
-  # setting that makes direct connections actually work.
-  publicly_accessible = true
+  # Gives the instance a public endpoint so a direct TCP connection (Vercel on the
+  # default path, or your laptop for seeding) can reach it over the internet —
+  # despite the public subnets/IGW/SG, the instance defaults to private without it.
+  # Flip to false once the app is on the RDS Data API (HTTPS + IAM, no public
+  # endpoint at all) for the fully hardened end-state; see README "harden" step.
+  # Defaults to true so first-time seeding over TCP stays easy.
+  publicly_accessible = var.publicly_accessible
 }
 
 # ---------------------------------------------------------------------------
