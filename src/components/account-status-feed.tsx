@@ -136,10 +136,13 @@ export function AccountStatusFeed({
   rows,
   sql,
   onRowClick,
+  onRowHover,
 }: {
   rows: AccountStatusRow[];
   sql: string;
   onRowClick: (accountId: string) => void;
+  // Prefetch the incident route on hover so the click navigates instantly.
+  onRowHover?: (accountId: string) => void;
 }) {
   const activeCount = rows.filter((r) => isActive(r.displayStatus)).length;
   const active = activeCount > 0;
@@ -183,6 +186,7 @@ export function AccountStatusFeed({
                   layout
                   transition={{ type: "spring", stiffness: 220, damping: 26 }}
                   onClick={() => onRowClick(r.accountId)}
+                  onMouseEnter={() => onRowHover?.(r.accountId)}
                   className={rowClass(r.displayStatus)}
                 >
                   <TableCell className="pl-6">
@@ -203,7 +207,9 @@ export function AccountStatusFeed({
                     {formatCurrency(r.arr)}
                   </TableCell>
                   <TableCell>
-                    {live && r.riskScore != null ? (
+                    {!live ? (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    ) : r.riskScore != null ? (
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span
@@ -218,7 +224,14 @@ export function AccountStatusFeed({
                         </div>
                       </div>
                     ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
+                      // Active incident whose triggering telemetry has aged out of
+                      // the live detection window (e.g. an anomaly-only account an
+                      // hour after the burst). The incident record persists, so the
+                      // status badge still reads Impacted/Notified — show that the
+                      // acute signal has passed rather than a bare "—".
+                      <span className="text-sm italic text-muted-foreground">
+                        signal subsided · monitoring
+                      </span>
                     )}
                   </TableCell>
                   <TableCell>

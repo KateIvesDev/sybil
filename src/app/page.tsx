@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 const GITHUB_URL = "https://github.com/kateivesdev/sybil";
 
 /**
- * Landing page — positions Sybil as a detection ENGINE for identity failure
+ * Landing page — positions Sybil as a detection ENGINE for telemety failure
  * modes (not a single deprovisioning trick) that helps Customer Success teams
  * act proactively when a failure hits a paying account. The breadth is the
  * platform story; the one concrete scenario is marked as the live demo so the
@@ -61,15 +61,13 @@ export default function Landing() {
         >
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-sm text-muted-foreground">
             <ShieldAlert className="h-3.5 w-3.5 text-destructive" />
-            CX Detection Engine for Identity Failures
+            Customer Observability for B2B SaaS
           </div>
           <h1 className="text-balance text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
-            Reach your key accounts <span className="text-destructive">before</span> they open a support ticket.
+           Know when to reach your key accounts <span className="text-destructive">before they churn.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground">
-
-            Sybil watches your deprovisioning and identity access signals in real time, <br/> so CX teams reach at-risk accounts before a failure becomes a ticket <br/> — <span className="font-bold">or worse, a churned account</span>.
-
+            Sybil correlates your product&apos;s own telemetry to the revenue each customer represents, then surfaces the accounts that are silently breaking, <br/>so CX teams reach them before a failure becomes a ticket <br/> — <span className="font-bold">or worse, a churned account</span>.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3">
             <Button size="lg" asChild>
@@ -102,7 +100,7 @@ export default function Landing() {
             n={1}
             icon={<Gauge className="h-5 w-5 text-destructive" />}
             title="Detect"
-            body="Two detectors over one telemetry stream catch the failure the moment it starts — not days later when it's a breach or an outage."
+            body="Two detectors over one telemetry stream catch the failure the moment it starts — not days later when it's an angry ticket or a lost renewal."
           />
           <ArcStep
             n={2}
@@ -122,12 +120,10 @@ export default function Landing() {
         <section className="mx-auto mt-16 max-w-3xl">
           <div className="text-center">
             <h2 className="text-xl font-semibold">
-              One engine. Every identity failure mode.
+              One engine. Any failure signal.
             </h2>
             <p className="mx-auto mt-2 max-w-xl text-base text-muted-foreground">
-              Each failure mode is one event type and a signature on the same
-              landing table. Adding one is new data, not a new system — the two
-              detectors and the revenue ranking never change.
+              This demo runs on an identity vendor — where one failure is both an outage and a renewal risk, which makes the signal vivid. But each mode is just an event type and a signature on the same landing table: the two detectors and the revenue ranking never change, so a new signal is new data, not a new system.
             </p>
           </div>
 

@@ -30,9 +30,12 @@ function sizer(rows: AccountStatusRow[]) {
 export function FleetConstellation({
   rows,
   onRowClick,
+  onRowHover,
 }: {
   rows: AccountStatusRow[];
   onRowClick: (accountId: string) => void;
+  // Prefetch the incident route on hover so the click navigates instantly.
+  onRowHover?: (accountId: string) => void;
 }) {
   if (rows.length === 0) return null;
   const sizeFor = sizer(rows);
@@ -67,6 +70,7 @@ export function FleetConstellation({
               layout
               type="button"
               onClick={() => onRowClick(r.accountId)}
+              onMouseEnter={() => onRowHover?.(r.accountId)}
               aria-label={`${r.accountName} — ${r.displayStatus}, ${formatCurrency(r.arr)} ARR`}
               title={`${r.accountName} · ${formatCurrency(r.arr)} · ${r.displayStatus}`}
               transition={{ layout: { type: "spring", stiffness: 220, damping: 26 } }}

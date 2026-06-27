@@ -98,7 +98,7 @@ export function Dashboard({ demoArmed = false }: { demoArmed?: boolean }) {
     if (!demoArmed || !ready || demoFired.current) return;
     demoFired.current = true;
     toast("Live · monitoring 20 tenants", {
-      description: "All clear. Watching identity-sync telemetry.",
+      description: "All clear. Watching product telemetry.",
     });
     const t = setTimeout(async () => {
       try {
@@ -115,6 +115,11 @@ export function Dashboard({ demoArmed = false }: { demoArmed?: boolean }) {
 
   function openAccount(id: string) {
     router.push(`/incidents/${id}`);
+  }
+
+  // Warm the incident route (code + data) on hover so the click feels instant.
+  function prefetchAccount(id: string) {
+    router.prefetch(`/incidents/${id}`);
   }
 
   // Cold-start screen: while the first load is in flight (Aurora resuming from a
@@ -201,7 +206,7 @@ export function Dashboard({ demoArmed = false }: { demoArmed?: boolean }) {
             <div>
               <div className="text-sm font-semibold leading-none">Sybil</div>
               <div className="text-[11px] text-muted-foreground">
-                Identity-impact detection
+                Failure impact detection
               </div>
             </div>
           </div>
@@ -233,11 +238,16 @@ export function Dashboard({ demoArmed = false }: { demoArmed?: boolean }) {
           activeCount={activeRows.length}
           pulse={pulse}
         />
-        <FleetConstellation rows={statusRows} onRowClick={openAccount} />
+        <FleetConstellation
+          rows={statusRows}
+          onRowClick={openAccount}
+          onRowHover={prefetchAccount}
+        />
         <AccountStatusFeed
           rows={statusRows}
           sql={sql}
           onRowClick={openAccount}
+          onRowHover={prefetchAccount}
         />
       </main>
 

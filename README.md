@@ -1,12 +1,14 @@
-# Sybil — Identity-impact detection
+# Sybil — Customer observability, ranked by revenue at risk
 
-> For CX teams at identity & access vendors: detect which accounts are impacted by identity failures — ranked by revenue at risk - before they open a support ticket or become a churned account.
+> Customer observability for B2B SaaS: Sybil correlates your product's telemetry to the revenue each customer represents and surfaces the accounts silently breaking — ranked by revenue at risk — before they open a support ticket or churn.
 
-**Who it's for:** Identity / SSO / IGA vendors. Their `accounts` are enterprise **tenants** that pay ARR.
+**Who it's for:** Any B2B SaaS with usage telemetry and customers on ARR. This demo runs on an identity vendor — where one failure is both an outage and a renewal risk, which makes the two-signal correlation vivid.
 
 **The problem:** Identity failures can cause a surge in support tickets, or even a renewal churn. 
 
 Sybil ingests the vendor's identity telemetry and tells them *which account is exposed to a failure right now*, and how much renewal that puts at risk, and enables CX teams to proactively reach out to key accounts.
+
+When a customer is silently broken — a failing integration, a degrading API — they may not file a support ticket right away. They quietly lose trust, then churn, and the damage is invisible until the renewal conversation. Sybil ingests the product's telemetry, tells you which account is breaking right now and how much renewal revenue is at risk, and lets CX teams proactively reach out to key accounts.
 
 ---
 
@@ -92,7 +94,7 @@ pnpm dev                          # http://localhost:3000
 | `pnpm dev` | run the app |
 | `pnpm db:push` | create/sync the schema (Drizzle Kit, `--force`) |
 | `pnpm db:seed` | reset + seed ~20 healthy tenants and their 7-day sync-failure baseline |
-| `pnpm db:matview` | create the baseline materialized view + partial indexes; schedule pg_cron refresh on Aurora ([`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)) |
+| `pnpm db:matview` | create the baseline materialized view + partial indexes ([`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)); refresh via `/api/cron/refresh-baseline` |
 | `pnpm db:studio` | browse the data in Drizzle Studio |
 | `pnpm demo:webhook [url] [count] [account_ref]` | fire a burst of **real raw Sentry webhooks** at `/api/webhooks/sentry` — the live "this is a real provider pipeline" demo |
 | `pnpm build` | production build |
@@ -127,7 +129,7 @@ export DATABASE_URL="postgresql://sybil_admin:${PASS}@<endpoint>:5432/sybil?sslm
 
 pnpm db:push             # create schema
 pnpm db:seed             # load demo data — keep this on direct TCP; the Data API is slow for bulk inserts
-pnpm db:matview          # create mv_hourly_error_counts + partial indexes; schedules pg_cron refresh on Aurora
+pnpm db:matview          # create mv_hourly_error_counts + partial indexes (refresh via /api/cron/refresh-baseline)
 ```
 
 > **Order matters:** run `db:matview` after `db:seed`. The correlation query reads the

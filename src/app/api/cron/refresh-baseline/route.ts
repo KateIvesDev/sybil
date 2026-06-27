@@ -1,9 +1,10 @@
 /**
  * POST|GET /api/cron/refresh-baseline — recompute the baseline rollup.
  *
- * On Aurora the refresh runs inside the database via pg_cron (every ~10 min);
- * this route is the fallback for clusters where pg_cron isn't enabled (configure
- * it as a Vercel Cron job), and a manual refresh hook to run after a re-seed.
+ * This is the portable refresh scheduler: wire it to a Vercel Cron job (the
+ * baseline is a 7-day average, so even a daily refresh is fine), and hit it
+ * manually after a re-seed. (pg_cron is an optional advanced alternative on
+ * Aurora clusters already configured for it — see docs/PERFORMANCE.md.)
  *
  * Optionally protect it with CRON_SECRET: if that env var is set, the caller must
  * send `Authorization: Bearer <CRON_SECRET>` (Vercel Cron sends this automatically).

@@ -197,11 +197,7 @@ export default function IncidentPage({
       </header>
 
       <main className="container space-y-6 py-6">
-        {loading && (
-          <div className="py-24 text-center text-sm text-muted-foreground">
-            Loading incident…
-          </div>
-        )}
+        {loading && <IncidentSkeleton />}
 
         {!loading && !data && (
           <div className="py-24 text-center">
@@ -805,6 +801,37 @@ function TicketContextCheck({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Shaped loading state — mirrors the incident layout (account header, left
+// detection/context/chart column, right outreach column) so navigation shows the
+// page shell immediately instead of a dead "Loading…" line while data fetches.
+function SkeletonBox({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse rounded-md bg-muted/50 ${className}`} />;
+}
+
+function IncidentSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <SkeletonBox className="h-7 w-56" />
+          <SkeletonBox className="h-4 w-40" />
+        </div>
+        <SkeletonBox className="h-6 w-24" />
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-6">
+          <SkeletonBox className="h-44 w-full" />
+          <SkeletonBox className="h-32 w-full" />
+          <SkeletonBox className="h-40 w-full" />
+        </div>
+        <div className="space-y-6">
+          <SkeletonBox className="h-64 w-full" />
+        </div>
+      </div>
     </div>
   );
 }

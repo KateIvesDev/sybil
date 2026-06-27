@@ -49,24 +49,15 @@ WITH DATA;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_mv_hourly_error_counts
   ON mv_hourly_error_counts (account_id, hour);
 
--- (3) Schedule the refresh inside the database via pg_cron when available
---     (Aurora PostgreSQL supports it). Local postgres:alpine does not ship
---     pg_cron, so this block no-ops there and the Vercel-cron fallback
---     (/api/cron/refresh-baseline) keeps the matview fresh instead.
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_cron') THEN
-    CREATE EXTENSION IF NOT EXISTS pg_cron;
-    -- Re-running unschedules any prior copy so the migration stays idempotent.
-    PERFORM cron.unschedule('sybil-refresh-baseline')
-      WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'sybil-refresh-baseline');
-    PERFORM cron.schedule(
-      'sybil-refresh-baseline',
-      '*/10 * * * *',  -- every 10 minutes
-      'REFRESH MATERIALIZED VIEW CONCURRENTLY mv_hourly_error_counts'
-    );
-    RAISE NOTICE 'pg_cron: scheduled sybil-refresh-baseline (every 10 min)';
-  ELSE
-    RAISE NOTICE 'pg_cron not available — relying on /api/cron/refresh-baseline fallback';
-  END IF;
-END $$;
+-- (3) Refresh is scheduled OUT OF BAND, not in this migration — the baseline is a
+--     7-day average, so a periodic `REFRESH MATERIALIZED VIEW CONCURRENTLY` keeps
+--     it current (the live anomaly window in queries.ts reads raw events, so the
+--     view being a little stale never delays detection). The portable scheduler is
+--     the /api/cron/refresh-baseline route wired to a Vercel Cron job; also hit it
+--     after a re-seed. See docs/PERFORMANCE.md.
+--
+--     pg_cron is intentionally NOT set up here: on Aurora it requires a custom
+--     cluster parameter group (shared_preload_libraries) plus cron.database_name,
+--     and the extension can only be created in that one database — none of which a
+--     SQL migration can do. It's an optional advanced path, documented in
+--     docs/PERFORMANCE.md for clusters already configured for it.

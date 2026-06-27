@@ -8,20 +8,35 @@ import { Activity, ArrowLeft, KeyRound, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
- * Demo SSO gate — theatre, not real auth. Sybil's customers are SSO/IGA vendors,
- * so "Sign in with SSO" is on-thesis: a single click, prefilled identity, clearly
- * labelled as a demo. It doubles as the on-ramp that primes the self-running demo:
- * on continue we reset (which also wakes a scaled-to-zero cluster behind
- * the "Signing in…" spinner) and hand off to /dashboard?demo=1, which holds green
- * a beat then auto-fires the incident.
+ * Demo access gate + on-ramp. The themed "Sign in with SSO" card doubles as the
+ * real password gate (the access code is checked by /api/auth, enforced by
+ * middleware) so only judges with the code can drive the site. On a correct
+ * code we reset (which also wakes a scaled-to-zero cluster behind the
+ * "Signing in…" spinner) and hand off to /dashboard?demo=1, which holds green a
+ * beat then auto-fires the incident. With no SITE_PASSWORD configured (local
+ * dev) any code is accepted, so the flow is unchanged.
  */
 export default function Login() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   async function signIn() {
     setBusy(true);
+    setError(null);
     try {
+      // Validate the access code first; on success this sets the gate cookie.
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        setError("Incorrect access code.");
+        setBusy(false);
+        return;
+      }
       // Best-effort reset so every visitor gets a fresh green→red arc. Also warms
       // Aurora from a scale-to-zero pause while the "Signing in…" state is shown.
       await fetch("/api/incident/reset", { method: "POST" });
@@ -57,11 +72,31 @@ export default function Login() {
           </div>
           <h1 className="text-lg font-semibold">Sign in to Sybil</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Identity-impact detection for your book of customers.
+           Churn detection for your book of customers.
           </p>
 
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !busy) signIn();
+            }}
+            placeholder="Access code"
+            autoComplete="current-password"
+            disabled={busy}
+            aria-label="Access code"
+            className="mt-6 w-full rounded-md border border-border bg-background px-3 py-2 text-center text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+          />
+          {error && (
+            <p className="mt-2 text-sm text-destructive">{error}</p>
+          )}
+
           <Button
-            className="mt-6 w-full gap-2"
+            className="mt-3 w-full gap-2"
             size="lg"
             onClick={signIn}
             disabled={busy}
@@ -90,8 +125,8 @@ export default function Login() {
           )}
 
           <p className="mt-6 border-t border-border pt-4 text-sm leading-relaxed text-muted-foreground">
-            Demo environment — single-click SSO, no real authentication. Sybil&apos;s
-            actual customers authenticate their tenants via SSO; this mirrors that.
+            Demo environment — access-code protected. Enter the code from the
+            submission to continue.
           </p>
         </motion.div>
       </main>

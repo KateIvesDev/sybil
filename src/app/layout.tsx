@@ -4,9 +4,9 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
-  title: "Sybil — Identity-impact detection",
+  title: "Sybil —  Customer observability for B2B SaaS",
   description:
-    "For identity & access vendors: detect which customer is silently exposed by identity failure, ranked by revenue at risk.",
+    "For B2B SaaS: detect which customer is silently failing, ranked by revenue at risk.",
 };
 
 export default function RootLayout({
