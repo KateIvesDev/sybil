@@ -18,8 +18,12 @@ export async function middleware(req: NextRequest) {
   const password = process.env.SITE_PASSWORD;
   if (!password) return NextResponse.next(); // gate disabled
 
-  // The login page is the gate itself — always reachable.
-  if (req.nextUrl.pathname === "/login") return NextResponse.next();
+  // The landing page (the public pitch) and the login page (the gate itself)
+  // are always reachable — judges should see what Sybil is before being asked
+  // for a code. Only the live demo surfaces (/dashboard, /incidents/*) are gated.
+  if (req.nextUrl.pathname === "/" || req.nextUrl.pathname === "/login") {
+    return NextResponse.next();
+  }
 
   const token = req.cookies.get(AUTH_COOKIE)?.value;
   if (token && token === (await expectedToken(password))) {

@@ -97,6 +97,23 @@ function riskTone(score: number) {
   return "text-foreground";
 }
 
+// Renewal-proximity tone — amber escalates as renewal nears, but never red:
+// saturated red stays reserved for genuine impact (see the design discipline in
+// the README), so a calm account renewing soon reads as "watch", not "alarm".
+function renewalTone(days: number) {
+  if (days <= 14) return "text-amber-500 font-semibold";
+  if (days <= 30) return "text-amber-500";
+  return "text-muted-foreground";
+}
+
+// Compact renewal date for the secondary line, e.g. "Jul 17".
+function formatRenewalDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 // The little chip naming which detector(s) fired. Exposure (a confirmed security
 // violation) is the alarming red; a pure rate anomaly is amber.
 function SignalChip({ kind }: { kind: "anomaly" | "exposure" | "both" }) {
@@ -172,6 +189,7 @@ export function AccountStatusFeed({
             <TableRow className="hover:bg-transparent">
               <TableHead className="pl-6">Tenant</TableHead>
               <TableHead className="text-right">ARR</TableHead>
+              <TableHead className="text-right">Renewal</TableHead>
               <TableHead>Signal · risk</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-8" />
@@ -205,6 +223,14 @@ export function AccountStatusFeed({
                     }`}
                   >
                     {formatCurrency(r.arr)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className={`tnum text-sm ${renewalTone(r.renewalDays)}`}>
+                      {r.renewalDays}d
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatRenewalDate(r.renewalDate)}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {!live ? (

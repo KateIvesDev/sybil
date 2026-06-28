@@ -13,8 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// TODO: set this to your Sybil repo before submitting.
-const GITHUB_URL = "https://github.com/kateivesdev/sybil";
+const GITHUB_URL = "https://github.com/KateIvesDev/sybil";
 
 /**
  * Landing page — positions Sybil as a detection ENGINE for telemety failure

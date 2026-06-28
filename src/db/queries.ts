@@ -254,6 +254,11 @@ export interface AccountRosterRow {
   arr: number;
   csmOwner: string;
   region: string;
+  // Renewal is master data on every account (not incident detail), so the roster
+  // carries it — the account-status table shows renewal proximity for every row,
+  // making the renewal-weighted risk ranking legible even at rest.
+  renewalDate: string;
+  renewalDays: number;
 }
 
 export async function getAllAccounts(): Promise<AccountRosterRow[]> {
@@ -264,7 +269,9 @@ export async function getAllAccounts(): Promise<AccountRosterRow[]> {
       tier        AS "tier",
       arr         AS "arr",
       csm_owner   AS "csmOwner",
-      region      AS "region"
+      region      AS "region",
+      renewal_date                                          AS "renewalDate",
+      GREATEST(0, EXTRACT(DAY FROM (renewal_date - now())))::int AS "renewalDays"
     FROM accounts
     ORDER BY arr DESC
   `);
@@ -276,6 +283,8 @@ export async function getAllAccounts(): Promise<AccountRosterRow[]> {
     arr: Number(r.arr),
     csmOwner: String(r.csmOwner),
     region: String(r.region),
+    renewalDate: String(r.renewalDate),
+    renewalDays: Number(r.renewalDays),
   }));
 }
 

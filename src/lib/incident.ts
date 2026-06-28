@@ -25,6 +25,7 @@ import {
 } from "@/lib/demo-data";
 import type { NormalizedEvent } from "@/lib/ingest/normalized";
 import { notifyIncident } from "@/lib/slack";
+import { refreshBaselineMatview } from "@/db/queries";
 
 // Burst severities skew high so MAX(severity) reads critical, like a real outage.
 const BURST_SEVERITIES: NormalizedEvent["severity"][] = [
@@ -177,6 +178,23 @@ export async function resetToCalm() {
   // Drop any open tickets and all outreach drafts.
   await db.delete(tickets).where(eq(tickets.status, "open"));
   await db.delete(outreach);
+
+  // Recompute the baseline rollup now that the incident rows are gone. Without
+  // this, a burst that was ever folded into mv_hourly_error_counts (e.g. the cron
+  // or a manual db:matview ran while an incident was live) stays baked into each
+  // tenant's mu/sigma for 7 days — inflating the baseline so a fresh burst no
+  // longer clears z>=3, and an anomaly-only target (Atlas, Vertex) fires an
+  // incident record but never surfaces in revenue-at-risk → it reads as "signal
+  // subsided" while its telemetry is minutes old. Refreshing on reset (every
+  // sign-in) self-heals that. Best-effort: a missing matview (matview step never
+  // run) must not wedge the reset.
+  try {
+    await refreshBaselineMatview();
+  } catch {
+    // No matview yet (local dev without db:matview) — detection falls back to
+    // the COALESCE(sigma,1) default; nothing to clean.
+  }
+
   return { ok: true };
 }
 

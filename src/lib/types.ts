@@ -38,6 +38,8 @@ export interface AccountRow {
   arr: number;
   csmOwner: string;
   region: string;
+  renewalDate: string;
+  renewalDays: number;
 }
 
 // One minute of fleet-wide telemetry, from /api/revenue-at-risk's `pulse` field.
@@ -69,6 +71,10 @@ export interface AccountStatusRow {
   arr: number;
   csmOwner: string;
   region: string;
+  // Renewal proximity — master data carried for every row, so the table shows how
+  // close each tenant is to renewal (the 15% renewal weight in the risk score).
+  renewalDate: string;
+  renewalDays: number;
   displayStatus: DisplayStatus;
   // Detection detail, populated from the signal set while an incident is active.
   riskScore?: number;

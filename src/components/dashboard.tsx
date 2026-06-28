@@ -94,9 +94,14 @@ export function Dashboard({ demoArmed = false }: { demoArmed?: boolean }) {
   // incident so an unattended judge sees the full green→red arc without clicking.
   // Fires once per mount; we strip ?demo=1 afterwards so a refresh won't re-arm.
   const demoFired = useRef(false);
+  // Latched once self-heal has evaluated the *first* load (or once the demo path
+  // takes over). Declared here so the demo-fire effect can claim it — a mount that
+  // runs the demo never needs (and must not run) the self-heal arc.
+  const healed = useRef(false);
   useEffect(() => {
     if (!demoArmed || !ready || demoFired.current) return;
     demoFired.current = true;
+    healed.current = true; // demo drives a fresh arc; disable self-heal for this mount
     toast("Live · monitoring 20 tenants", {
       description: "All clear. Watching product telemetry.",
     });
@@ -112,6 +117,46 @@ export function Dashboard({ demoArmed = false }: { demoArmed?: boolean }) {
     }, DEMO_DWELL_MS);
     return () => clearTimeout(t);
   }, [demoArmed, ready, refresh, router]);
+
+  // Self-heal a stale board. A returning, already-authenticated judge can land on
+  // /dashboard *without* ?demo=1 (so the demo-fire effect above never arms) and
+  // find a previous session's incident whose burst has aged out of the live
+  // 60-minute window — an "Impacted"/"Notified" row with no live signal, which the
+  // feed renders as "signal subsided · monitoring". Detect that contradiction
+  // (active incident, no matching live row) on load and replay the arc: reset to
+  // calm, hold green a beat, then re-fire — so every visit shows a fresh green→red
+  // instead of a stale half-state. Evaluated exactly once, against the FIRST loaded
+  // state — we latch `healed` immediately so later polls (and the demo path's
+  // ?demo=1 → /dashboard URL swap, which flips demoArmed to false) can never make a
+  // freshly-fired incident look "stale" and reset it out from under the judge.
+  useEffect(() => {
+    if (demoArmed || !ready || healed.current) return;
+    healed.current = true; // evaluate the initial load only, then never again
+    const hasStaleIncident = incidents.some(
+      (i) =>
+        i.incidentStatus === "active" &&
+        !impact.some((r) => r.accountId === i.accountId),
+    );
+    if (!hasStaleIncident) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await fetch("/api/incident/reset", { method: "POST" });
+        if (cancelled) return;
+        await refresh(); // board returns to calm green
+        await new Promise((res) => setTimeout(res, DEMO_DWELL_MS));
+        if (cancelled) return;
+        await fetch("/api/incident/trigger", { method: "POST" });
+        if (cancelled) return;
+        await refresh();
+      } catch {
+        // Leave whatever's on screen; the manual controls still work.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [demoArmed, ready, incidents, impact, refresh]);
 
   function openAccount(id: string) {
     router.push(`/incidents/${id}`);
@@ -147,6 +192,8 @@ export function Dashboard({ demoArmed = false }: { demoArmed?: boolean }) {
         arr: a.arr,
         csmOwner: a.csmOwner,
         region: a.region,
+        renewalDate: a.renewalDate,
+        renewalDays: a.renewalDays,
         displayStatus,
         riskScore: det?.riskScore,
         signalKind: det?.signalKind,
