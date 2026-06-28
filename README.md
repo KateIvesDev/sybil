@@ -243,7 +243,7 @@ endpoint, no open port, IAM-authed over HTTPS:
 4. Verify the hole is closed: the cluster SG should show only your admin `/32` on 5432,
    and a TCP connect from any other IP should be refused.
 
-> **Cold start:** a paused cluster takes ~15–30s to resume; the app shows a "Resuming Aurora Serverless v2 from zero…" screen on first load (`maxDuration = 60` keeps the request alive through it). To avoid it entirely for a live demo, set `aurora_min_acu = 0.5` for the demo window (~$0.06/hr) so it never pauses. **Cost:** keep your own `pnpm dev` on local Docker — a browser left open on the dashboard polls every 5s and prevents the cluster from ever pausing.
+> **Cold start:** a paused cluster takes \~15–30s to resume; the app shows a "Resuming Aurora Serverless v2 from zero…" screen on first load (`maxDuration = 60` keeps the request alive through it). To avoid it entirely for a live demo, set `aurora_min_acu = 0.5` for the demo window (\~$0.06/hr) so it never pauses. **Cost:** keep your own `pnpm dev` on local Docker — a browser left open on the dashboard polls every 5s and prevents the cluster from ever pausing.
 >
 > **Teardown:** `cd terraform && terraform destroy`. `skip_final_snapshot = true` is set, so it's clean and immediate.
 
