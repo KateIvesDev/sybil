@@ -33,7 +33,7 @@ export interface IncidentNotice {
 export async function notifyIncident(notice: IncidentNotice): Promise<void> {
   const reviewLink = `${notice.baseUrl}/incidents/${notice.accountId}`;
   const text =
-    `@${notice.csmOwner} — ${notice.accountName} (${formatCurrency(notice.arr)} ARR) ` +
+    `<@U0715Q9SD1D> — ${notice.accountName} (${formatCurrency(notice.arr)} ARR) ` +
     `is hitting errors on ${notice.endpoint}. ` +
     `Review: ${reviewLink}`;
 
