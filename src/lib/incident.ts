@@ -12,14 +12,13 @@
  * identity findings — plus open tickets and outreach drafts, preserving the
  * 7-day baseline history so detection keeps its reference point.
  */
-import { eq, inArray, and } from "drizzle-orm";
+import { eq, inArray, and, gte } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { db } from "@/db";
 import { accounts, telemetryEvents, tickets, outreach } from "@/db/schema";
 import {
   INCIDENT_TARGETS,
   INCIDENT_PROFILES,
-  INCIDENT_SIGNATURES,
   externalRefFor,
   draftOutreach,
 } from "@/lib/demo-data";
@@ -161,15 +160,95 @@ export async function triggerIncident(baseUrl: string) {
   };
 }
 
+/**
+ * Open an incident for any account DETECTION surfaced that doesn't already have
+ * one. This is what lets the *real* pipeline — a provider webhook landing through
+ * /api/webhooks → /api/ingest, e.g. `pnpm demo:webhook` — drive the dashboard
+ * lifecycle, not just the scripted Trigger button: revenue-at-risk decides who is
+ * impacted, and this reconciles an incident record (the thing deriveDisplayStatus
+ * reads) into existence so the row goes red and the human-in-the-loop outreach can
+ * begin. Idempotent: accounts that already have a record (from the Trigger, or a
+ * prior poll) are skipped, so a CSM's in-progress lifecycle is never overwritten.
+ *
+ * Called from the /api/revenue-at-risk read path (polled every 5s), so a freshly
+ * detected account opens its incident within a poll or two.
+ *
+ * @param baseUrl absolute origin so the Slack heads-up's Review link is clickable.
+ */
+export async function openIncidentsForDetected(
+  detected: {
+    accountId: string;
+    accountName: string;
+    arr: number;
+    csmOwner: string;
+    failingEndpoint?: string | null;
+    syncFailures?: number;
+    exposureCount?: number;
+    subject?: string | null;
+  }[],
+  baseUrl: string,
+): Promise<number> {
+  if (detected.length === 0) return 0;
+
+  const ids = detected.map((d) => d.accountId);
+  const existing = await db
+    .select({ accountId: outreach.accountId })
+    .from(outreach)
+    .where(inArray(outreach.accountId, ids));
+  const have = new Set(existing.map((e) => e.accountId));
+
+  const fresh = detected.filter((d) => !have.has(d.accountId));
+  if (fresh.length === 0) return 0;
+
+  await db.insert(outreach).values(
+    fresh.map((d) => ({
+      accountId: d.accountId,
+      draftBody: draftOutreach(
+        d.accountName,
+        d.csmOwner,
+        d.failingEndpoint ?? "the affected deprovisioning endpoint",
+        d.syncFailures ?? 0,
+        (d.exposureCount ?? 0) > 0,
+        d.subject ?? undefined,
+      ),
+      // Defaults: incident_status='active', outreach_status='none' → "Impacted".
+    })),
+  );
+
+  // Heads-up to #sybil-alert for each newly opened incident (notify-only).
+  await Promise.all(
+    fresh.map((d) =>
+      notifyIncident({
+        csmOwner: d.csmOwner,
+        accountName: d.accountName,
+        arr: d.arr,
+        endpoint: d.failingEndpoint ?? "deprovisioning sync",
+        accountId: d.accountId,
+        baseUrl,
+      }),
+    ),
+  );
+
+  return fresh.length;
+}
+
 export async function resetToCalm() {
-  // Clear only the incident, never the baseline. Delete (a) the sync-failure
-  // burst by its distinctive incident signatures, and (b) every identity finding
-  // (stale_access / policy_violation only ever exist from a trigger). The 7-day
-  // baseline error history — and the benign latency noise — are preserved so the
-  // anomaly detector keeps its reference point and the charts stay alive.
+  // Clear only the incident, never the baseline. Delete (a) the error BURST and
+  // (b) every identity finding (stale_access / policy_violation only ever exist
+  // from a trigger). The 7-day baseline error history — and the benign latency
+  // noise — are preserved so the anomaly detector keeps its reference point and
+  // the charts stay alive.
+  //
+  // The burst is matched by SEVERITY (≥ 3), not by signature: the in-app Trigger
+  // writes INCIDENT_SIGNATURES, but a real provider webhook (demo:webhook → the
+  // Sentry adapter) writes its own arbitrary signature, so signature-matching
+  // would leave those errors in the live window and — now that detection auto-
+  // opens incidents — the next poll would just re-open the incident ("keeps
+  // firing" after reset). The seed baseline is severity 1–2; every burst, from
+  // either source, is severity ≥ 3, so severity cleanly separates the two.
   await db
     .delete(telemetryEvents)
-    .where(inArray(telemetryEvents.errorSignature, INCIDENT_SIGNATURES));
+    .where(and(eq(telemetryEvents.eventType, "error"), gte(telemetryEvents.severity, 3)));
   await db
     .delete(telemetryEvents)
     .where(

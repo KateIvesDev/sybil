@@ -77,7 +77,7 @@ pnpm dev                          # http://localhost:3000
 
 1. Open the app → **Sign in with SSO** (one click). The command center loads all green, **0 tenants at risk** (every tenant has a low baseline sync-failure hum; none is anomalous) — then, after a beat, the incident **fires itself**. (Driving it live? Use the **Trigger incident** button instead.)
 2. Four tenants' deprovisioning pipelines start failing; two (Acme, Helios) also surface a confirmed stale-access violation. The dashboard flips to red: toast + banner, rows sorted by **risk score** — **Acme #1** (`exposure + anomaly`, terminated Super-Admin exposed 4h and caught at the first failures, renews in 23d) above the anomaly-only tenants.
-3. Click Acme → the **"Why Sybil flagged this tenant"** panel: *16× baseline* sync failures beside the confirmed exposure (`jane.doe@acme.com` · Super Admin · exposed 4h, flagged at the first failures), with the risk score. Hit **Check for related tickets** — Acme comes back *silent* ("the customer hasn't reported this"), which is the whole point.
+3. Click Acme → the **"Why Sybil flagged this tenant"** panel: *8× baseline* sync failures beside the confirmed exposure (`jane.doe@acme.com` · Super Admin · exposed 4h, flagged at the first failures), with the risk score. Hit **Check for related tickets** — Acme comes back *silent* ("the customer hasn't reported this"), which is the whole point.
 4. Edit the outreach draft → **Send** (logs to the server console, or posts to `SLACK_WEBHOOK_URL`). The row turns amber `Notified`.
 5. **Mark resolved**, then **Send resolution update** — the row settles to calm green `Resolved`.
 6. Hit **View query** to show the live dual-signal CTE SQL.
