@@ -2,19 +2,15 @@
 
 > Customer observability for B2B SaaS: Sybil correlates your product's telemetry to the revenue each customer represents and surfaces the accounts silently breaking — ranked by revenue at risk — before they open a support ticket or churn.
 
-**Who it's for:** Any B2B SaaS with usage telemetry and customers on ARR. This demo runs on an identity vendor — where one failure is both an outage and a renewal risk, which makes the two-signal correlation vivid.
+**Who it's for:** Any B2B SaaS with usage telemetry and customers on ARR. This demo runs on an identity vendor — where one failure is both an outage and a renewal risk.
 
-**The problem:** Identity failures can cause a surge in support tickets, or even a renewal churn. 
-
-Sybil ingests the vendor's identity telemetry and tells them *which account is exposed to a failure right now*, and how much renewal that puts at risk, and enables CX teams to proactively reach out to key accounts.
-
-When a customer is silently broken — a failing integration, a degrading API — they may not file a support ticket right away. They quietly lose trust, then churn, and the damage is invisible until the renewal conversation. Sybil ingests the product's telemetry, tells you which account is breaking right now and how much renewal revenue is at risk, and lets CX teams proactively reach out to key accounts.
+**The problem:** When system failures affect key accounts, it can put revenue at risk for a B2B SaaS. When a customer experiences a product failure — a failing integration, a degrading API — they may not file a support ticket right away. They quietly lose trust, then churn, and the damage is invisible until the renewal conversation. Sybil ingests the product's telemetry, tells you which account is breaking right now and how much renewal revenue is at risk, and lets CX teams proactively reach out to key accounts.
 
 ---
 
 ## Why Aurora PostgreSQL
 
-**Sybil runs two complementary detection strategies over one normalized identity-telemetry landing table — statistical rate-anomaly baselining on deprovisioning-sync failures and exposure scoring on discrete stale-access violations — unified into a single revenue-weighted risk ranking, all in SQL.** That dual-signal correlation (window functions, `STDDEV_POP`, `MODE() WITHIN GROUP`, time-window CTEs, blast-radius math) belongs *in the database* — Aurora runs it at scale behind a serverless-friendly pooled endpoint.
+**Sybil runs two complementary detection strategies over one normalized telemetry landing table — statistical rate-anomaly baselining on deprovisioning-sync failures and exposure scoring on discrete stale-access violations — unified into a single revenue-weighted risk ranking, all in SQL.** That dual-signal correlation (window functions, `STDDEV_POP`, `MODE() WITHIN GROUP`, time-window CTEs, blast-radius math) belongs *in the database* — Aurora runs it at scale behind a serverless-friendly pooled endpoint.
 
 ---
 
