@@ -101,6 +101,80 @@ pnpm dev                          # http://localhost:3000
 
 ---
 
+## Architecture
+
+How the application connects to its back-end components — from a judge's browser and the
+external telemetry providers, through the Next.js app on Vercel, to Aurora on AWS.
+
+```mermaid
+flowchart TB
+    subgraph clients["Clients & event sources"]
+        client["Browser"]
+        providers["Telemetry providers<br/>(Sentry, Datadog)"]
+        cron["Vercel Cron"]
+    end
+
+    subgraph vercel["Vercel — Next.js app (App Router)"]
+        mw["Edge middleware<br/>access-code gate"]
+        pages["React UI<br/>command center · fleet · feed · incident"]
+
+        wh["/api/webhooks/[provider]<br/>raw → provider adapter → normalize"]
+        ing["/api/ingest<br/>normalized write contract<br/>(telemetry + master-data upserts)"]
+        helper["ingestNormalizedEvent()<br/>resolve account + idempotent insert"]
+
+        rar["/api/revenue-at-risk<br/>dual-signal correlation SQL<br/>per-account signal row → ranked"]
+        cronr["/api/cron/refresh-baseline"]
+        detail["Incident detail (per account)<br/>/api/accounts/[id] · outreach · tickets"]
+
+        demo["Demo driver<br/>/api/incident/trigger · reset<br/>(simulates a provider burst)"]
+
+        dbc["DB client (Drizzle)<br/>one API, two drivers"]
+    end
+
+    subgraph aws["AWS"]
+        subgraph vpc["VPC"]
+            aurora[("Aurora Serverless v2 · PostgreSQL<br/>scale-to-zero<br/><br/>accounts · telemetry_events · tickets · outreach<br/>mv_hourly_error_counts + partial indexes")]
+        end
+        secrets["Secrets Manager<br/>(DB credentials)"]
+        iam["IAM<br/>(least-privilege)"]
+    end
+
+    slack["Slack #sybil-alert<br/>pings the account owner (CSM)"]
+
+    client -->|HTTPS| mw --> pages
+    providers -->|POST raw payload| wh
+    cron -->|GET + CRON_SECRET| cronr
+
+    pages <-.poll 5s / ranked rows.-> rar
+    pages -.drill into account.-> detail
+    detail -.this account's signal row.-> rar
+
+    wh --> helper
+    ing --> helper
+    helper --> dbc
+    rar --> dbc
+    cronr -->|REFRESH MATERIALIZED VIEW| dbc
+    detail --> dbc
+    demo --> dbc
+    demo -->|on impact| slack
+
+    dbc -->|"Direct TCP — pg pool (seeding / local)"| aurora
+    dbc ==>|"RDS Data API — HTTPS + IAM (prod, no open 5432)"| aurora
+    aurora -.ranked accounts.-> pages
+    iam -.authorizes.- aurora
+    secrets -.credentials.- aurora
+```
+
+**Reading the diagram**
+
+- **One write contract, many sources.** Real provider webhooks (`/api/webhooks/[provider]`) run a per-provider adapter to normalize a raw payload; `/api/ingest` is that same normalized contract exposed directly (used for programmatic telemetry and CRM/billing master-data upserts). Both funnel through `ingestNormalizedEvent()` — account resolution + idempotent insert into the single `telemetry_events` landing table. The **demo driver** (`/api/incident/trigger` · `reset`) just simulates a provider burst against that same path so the green→red arc runs unattended.
+- **Two ways the app reaches Aurora** (same Drizzle call sites, switched by `USE_DATA_API`): a pooled **`pg` TCP** connection for local dev and bulk seeding, and the **RDS Data API** (HTTPS + IAM, no open `5432`) for the hardened Vercel deployment outside the VPC. See [`src/db/index.ts`](src/db/index.ts).
+- **The read path** is `/api/revenue-at-risk`, the dual-signal revenue-weighted correlation query ([`src/db/queries.ts`](src/db/queries.ts)) the UI polls every 5s. It returns a **full signal row per affected account** (z-score, exposure count, signal kind, risk score) — the ranking is just an `ORDER BY` over that. Its slow-moving baseline reads from the `mv_hourly_error_counts` materialized view, refreshed out-of-band by **Vercel Cron** → `/api/cron/refresh-baseline` (`REFRESH MATERIALIZED VIEW CONCURRENTLY`).
+- **Drilling into one account** (`/incidents/[accountId]`) reuses that same per-account signal row and composes it with `/api/accounts/[id]` (master data), `/api/outreach` (draft + lifecycle), and `/api/tickets` — the ranked board and the per-account "why flagged" panel are the same data at two granularities, not two pipelines.
+- **Aurora** scales to zero between incidents; **Secrets Manager** holds the DB credentials and **IAM** authorizes the Data API path. Slack is a notify side effect — when an account is impacted it pings that account's owner (CSM) and links to the incident page; it never approves or sends anything.
+
+---
+
 ## Deploying to AWS + Vercel
 
 The database runs on AWS (provisioned by [`terraform/`](terraform/)); the app runs on Vercel and connects back to it. The infra is a minimal VPC and **Aurora Serverless v2 (PostgreSQL)** configured to **scale to zero** (`min_capacity = 0`) so an idle cluster costs ~nothing — right for an app that sits unattended through a multi-week judging window. No RDS Proxy (it holds open connections, which blocks scale-to-zero); Sybil's `pg` Pool is cached on `globalThis` per warm container instead ([`src/db/index.ts`](src/db/index.ts)).
